@@ -54,6 +54,12 @@ class Database:
                 timestamp   TEXT NOT NULL
             )
         """)
+        try:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN due_date TEXT")
+            await self._db.commit()
+        except aiosqlite.OperationalError:
+            pass  # column already exists
+
         await self._db.commit()
 
     async def close(self) -> None:
@@ -195,6 +201,14 @@ class Database:
             (project_id, user, message, timestamp),
         )
         await self._db.commit()
+
+    async def set_due_date(self, guild_id: int, name: str, due_date: str | None) -> bool:
+        async with self._db.execute(
+            "UPDATE projects SET due_date = ? WHERE guild_id = ? AND name = ?",
+            (due_date, guild_id, name),
+        ) as cursor:
+            await self._db.commit()
+            return cursor.rowcount > 0
 
     async def get_recent_updates(self, project_id: int, limit: int = 5) -> list:
         async with self._db.execute(

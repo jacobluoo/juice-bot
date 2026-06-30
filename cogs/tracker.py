@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 
 class Tracker(commands.Cog):
@@ -17,6 +17,7 @@ class Tracker(commands.Cog):
             color=discord.Color.blue(),
         )
         embed.add_field(name="!project create <name>", value="Create a new project", inline=False)
+        embed.add_field(name="!project due <name> <YYYY-MM-DD>", value="Set a due date for a project", inline=False)
         embed.add_field(name="!projects", value="List all projects", inline=False)
         embed.add_field(name="!update <project> <message>", value="Log a progress update", inline=False)
         embed.add_field(name="!log <project>", value="View last 5 updates", inline=False)
@@ -41,6 +42,34 @@ class Tracker(commands.Cog):
             )
             embed.add_field(name="Created by", value=ctx.author.display_name, inline=True)
             embed.set_footer(text="Project names are single words for !update and !log. Use !projects to list all.")
+        await ctx.send(embed=embed)
+
+    @project.command(name="due")
+    async def project_due(self, ctx: commands.Context, project_name: str, due_date: str):
+        if not ctx.guild:
+            return
+        try:
+            parsed = datetime.strptime(due_date, "%Y-%m-%d").date()
+        except ValueError:
+            await ctx.send(embed=discord.Embed(
+                title="Invalid Date",
+                description="Use the format `YYYY-MM-DD` (e.g. `2026-07-01`).",
+                color=discord.Color.red(),
+            ))
+            return
+        updated = await self.bot.db.set_due_date(ctx.guild.id, project_name, parsed.isoformat())
+        if not updated:
+            embed = discord.Embed(
+                title="Project Not Found",
+                description=f"No project named **{project_name}** exists. Use `!projects` to see all projects.",
+                color=discord.Color.red(),
+            )
+        else:
+            embed = discord.Embed(
+                title="Due Date Set",
+                description=f"**{project_name}** is due on **{parsed.strftime('%B %d, %Y')}**.",
+                color=discord.Color.green(),
+            )
         await ctx.send(embed=embed)
 
     @commands.command(name="update")
@@ -108,8 +137,9 @@ class Tracker(commands.Cog):
             embed.description = "No projects yet. Use `!project create <name>` to get started."
         else:
             for i, row in enumerate(rows):
+                due = f" · Due {row['due_date']}" if row['due_date'] else ""
                 embed.add_field(
-                    name=f"{i + 1}. {row['name']}",
+                    name=f"{i + 1}. {row['name']}{due}",
                     value=f"Created by {row['created_by']} on {row['created_at'][:10]}",
                     inline=False,
                 )
